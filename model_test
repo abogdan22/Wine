@@ -37,17 +37,17 @@ remove_var(xs, remove) %as%
 
 step_selection(type, lm_full, lm_null) %as% {
     if (type == "forward") return(step(lm_null
-            , scope = list(lower = lm_null, upper = lm_full)
-            , direction = "forward"
-        ))
+        , scope = list(lower = lm_null, upper = lm_full)
+        , direction = "forward"
+    ))
     if (type == "backward") return(step(lm_full
-            , scope = list(lower = lm_null, upper = lm_full)
-            , direction = "backward"
-        ))
-        return(step(lm_null
-            , scope = list(lower = lm_null, upper = lm_full)
-            , direction = "both"
-        ))
+        , scope = list(lower = lm_null, upper = lm_full)
+        , direction = "backward"
+    ))
+    return(step(lm_null
+        , scope = list(lower = lm_null, upper = lm_full)
+        , direction = "both"
+    ))
 }
 
 run_tests(seed, train, test, lm_full, lm_null) %as% {
