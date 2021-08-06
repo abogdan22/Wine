@@ -1,0 +1,130 @@
+library(dplyr)
+library(glue)
+library(lambda.r)
+library(MASS)
+library(MASS)
+library(nnet)
+library(pryr)
+library(readr)
+library(ROCR)
+library(tidyverse)
+
+build_formula(xs) %as%
+    glue("quality_bit ~ {paste(xs, collapse = ' + ')}")
+
+make_predictions(step, train, test) %as% {
+    train_lm <- glm(build_formula(remove_var(sort(names(step$coefficients)), "(Intercept)"))
+        , data = train
+        , family = "binomial"
+    )
+    predictions <- predict(train_lm, newdata = test, type = "response")
+    rates <- prediction(predictions, test$quality_bit)
+    auc <- performance(rates, measure = "auc")
+    confusion <- table(train$quality_bit, head(predictions, nrow(train)) > 0.5)
+
+    return(c(auc@y.values[[1]], confusion[1], confusion[2], confusion[3], confusion[4]))
+}
+
+rand_list(num, ls = Null) %as% {
+    ls <- unique(round(runif(num, 1, .Machine$integer.max)))
+    if (num <= length(ls))
+        return(head(ls, num))
+    return(rand_list(num, ls))
+}
+
+remove_var(xs, remove) %as%
+    xs[Vectorize(f(x, all(remove != x)))(xs)]
+
+step_selection(type, lm_full, lm_null) %as% {
+    if (type == "forward") return(step(lm_null
+            , scope = list(lower = lm_null, upper = lm_full)
+            , direction = "forward"
+        ))
+    if (type == "backward") return(step(lm_full
+            , scope = list(lower = lm_null, upper = lm_full)
+            , direction = "backward"
+        ))
+        return(step(lm_null
+            , scope = list(lower = lm_null, upper = lm_full)
+            , direction = "both"
+        ))
+}
+
+run_tests(seed, train, test, lm_full, lm_null) %as% {
+    ls <- list()
+    for (type in c("forward", "backward", "stepwise")) {
+        step <- step_selection(type, lm_full, lm_null)
+        predictions <- make_predictions(step, train, test)
+        ls[[length(ls) + 1]] <- c(seed, type, paste(sort(names(step$coefficients)), collapse = ", "), step$aic, predictions[1], predictions[2], predictions[3], predictions[4], predictions[5])
+    }
+    return(ls)
+}
+
+setwd("...")
+df <- read.csv("combined_wine.csv")
+
+df$quality_bit <- as.integer(df$quality > 5)
+
+pred_full <- remove_var(names(df), c(
+      "quality"
+    , "quality_bit"
+))
+
+df_r <- df %>% filter(as.logical(color))
+df_w <- df %>% filter(!as.logical(color))
+
+results_r <- read.csv(text = "seed,type,model,aic,auc,f0,f1,t0,t1")
+results_w <- read.csv(text = "seed,type,model,aic,auc,f0,f1,t0,t1")
+
+ls_r <- list()
+ls_w <- list()
+
+for (i in rand_list(1000)) {
+    set.seed(i)
+
+    sample_r <- sample.int(nrow(df_r), floor(0.5 * nrow(df_r)), replace = F)
+    train_r <- df_r[sample_r, ]
+    test_r <- df_r[-sample_r, ]
+    df_r_full <- glm(build_formula(pred_full), data = train_r, family = "binomial")
+    df_r_null <- glm(quality_bit ~ 1, data = train_r, family = "binomial")
+    r <- run_tests(i, train_r, test_r, df_r_full, df_r_null)
+
+    sample_w <- sample.int(nrow(df_w), floor(0.5 * nrow(df_w)), replace = F)
+    train_w <- df_w[sample_w, ]
+    test_w <- df_w[-sample_w, ]
+    df_w_full <- glm(build_formula(pred_full), data = train_w, family = "binomial")
+    df_w_null <- glm(quality_bit ~ 1, data = train_w, family = "binomial")
+    w <- run_tests(i, train_w, test_w, df_w_full, df_w_null)
+
+    for (i in 1:3) {
+        ls_r[[length(ls_r) + 1]] <- r[[i]]
+        ls_w[[length(ls_r) + 1]] <- w[[i]]
+    }
+}
+
+results_r <- rbind(results_r, ls_r)
+results_w <- rbind(results_w, ls_w)
+head(results_r, 2)
+nrow(results_r)
+length(ls_w)
+
+ls_w[1]
+
+sink("r_test.txt")
+paste(Vectorize(function(x) return(paste(x, collapse = "|")))(as.vector(ls_r)))
+sink()
+
+df_rr <- read_delim("r_test.txt", delim = "|")
+df_ww <- read_delim("w_test.txt", delim =  "|")
+
+head(df_rr, 3)
+df_rr %>% count(model) %>% arrange(desc(n))
+df_ww %>% count(model) %>% arrange(desc(n))
+
+df_rr %>% arrange(model)
+
+df_rr %>% count(model, type) %>% arrange(desc(n))
+df_ww %>% count(model, type) %>% arrange(desc(n))
+
+write.csv(df_rr %>% arrange(desc(auc)), "r_test.csv")
+write.csv(df_ww %>% arrange(desc(auc)), "w_test.csv")
