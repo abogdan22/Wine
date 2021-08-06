@@ -104,27 +104,19 @@ for (i in rand_list(1000)) {
 
 results_r <- rbind(results_r, ls_r)
 results_w <- rbind(results_w, ls_w)
-head(results_r, 2)
-nrow(results_r)
-length(ls_w)
-
-ls_w[1]
 
 sink("r_test.txt")
 paste(Vectorize(function(x) return(paste(x, collapse = "|")))(as.vector(ls_r)))
+sink()
+sink("w_test.txt")
+paste(Vectorize(function(x) return(paste(x, collapse = "|")))(as.vector(ls_w)))
 sink()
 
 df_rr <- read_delim("r_test.txt", delim = "|")
 df_ww <- read_delim("w_test.txt", delim =  "|")
 
-head(df_rr, 3)
 df_rr %>% count(model) %>% arrange(desc(n))
 df_ww %>% count(model) %>% arrange(desc(n))
-
-df_rr %>% arrange(model)
-
-df_rr %>% count(model, type) %>% arrange(desc(n))
-df_ww %>% count(model, type) %>% arrange(desc(n))
 
 write.csv(df_rr %>% arrange(desc(auc)), "r_test.csv")
 write.csv(df_ww %>% arrange(desc(auc)), "w_test.csv")
