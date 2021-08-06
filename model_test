@@ -73,9 +73,6 @@ pred_full <- remove_var(names(df), c(
 df_r <- df %>% filter(as.logical(color))
 df_w <- df %>% filter(!as.logical(color))
 
-results_r <- read.csv(text = "seed,type,model,aic,auc,f0,f1,t0,t1")
-results_w <- read.csv(text = "seed,type,model,aic,auc,f0,f1,t0,t1")
-
 ls_r <- list()
 ls_w <- list()
 
@@ -101,9 +98,6 @@ for (i in rand_list(1000)) {
         ls_w[[length(ls_r) + 1]] <- w[[i]]
     }
 }
-
-results_r <- rbind(results_r, ls_r)
-results_w <- rbind(results_w, ls_w)
 
 sink("r_test.txt")
 paste(Vectorize(function(x) return(paste(x, collapse = "|")))(as.vector(ls_r)))
