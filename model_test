@@ -9,9 +9,11 @@ library(readr)
 library(ROCR)
 library(tidyverse)
 
+# builds a formula for the model of the quality_bit against the specified predictors
 build_formula(xs) %as%
     glue("quality_bit ~ {paste(xs, collapse = ' + ')}")
 
+# returns a vector of the AUC and Confusion Matrix predictions
 make_predictions(step, train, test) %as% {
     train_lm <- glm(build_formula(remove_var(sort(names(step$coefficients)), "(Intercept)"))
         , data = train
@@ -25,6 +27,7 @@ make_predictions(step, train, test) %as% {
     return(c(auc@y.values[[1]], confusion[1], confusion[2], confusion[3], confusion[4]))
 }
 
+# generates a list of unique, random number of the specified length
 rand_list(num, ls = Null) %as% {
     ls <- unique(round(runif(num, 1, .Machine$integer.max)))
     if (num <= length(ls))
@@ -32,9 +35,12 @@ rand_list(num, ls = Null) %as% {
     return(rand_list(num, ls))
 }
 
+# removes the list of specified variables from a list
+# to be used with the predictors
 remove_var(xs, remove) %as%
     xs[Vectorize(f(x, all(remove != x)))(xs)]
 
+# does the stepwise test of the specified type for the specifed linear models
 step_selection(type, lm_full, lm_null) %as% {
     if (type == "forward") return(step(lm_null
         , scope = list(lower = lm_null, upper = lm_full)
@@ -50,6 +56,7 @@ step_selection(type, lm_full, lm_null) %as% {
     ))
 }
 
+# returns a vector of the prediction test results for the specified model
 run_tests(seed, train, test, lm_full, lm_null) %as% {
     ls <- list()
     for (type in c("forward", "backward", "stepwise")) {
@@ -63,29 +70,40 @@ run_tests(seed, train, test, lm_full, lm_null) %as% {
 setwd("...")
 df <- read.csv("combined_wine.csv")
 
+# create a binary variable for the wine quality
 df$quality_bit <- as.integer(df$quality > 5)
 
+# exclude the response variables from the list of predictors
 pred_full <- remove_var(names(df), c(
       "quality"
     , "quality_bit"
 ))
 
+# filter the combined dataset by color
 df_r <- df %>% filter(as.logical(color))
 df_w <- df %>% filter(!as.logical(color))
 
+# create lists for the test results
 ls_r <- list()
 ls_w <- list()
 
+# run 1000 iterations of all 3 stepwise tests and get the prediction results for both colors
 for (i in rand_list(1000)) {
     set.seed(i)
-
+    
+    # generate the rows to included in the train and test dataframes
     sample_r <- sample.int(nrow(df_r), floor(0.5 * nrow(df_r)), replace = F)
     train_r <- df_r[sample_r, ]
     test_r <- df_r[-sample_r, ]
+    
+    # create the full and intercept only linear models
     df_r_full <- glm(build_formula(pred_full), data = train_r, family = "binomial")
     df_r_null <- glm(quality_bit ~ 1, data = train_r, family = "binomial")
+    
+    # run the tests
     r <- run_tests(i, train_r, test_r, df_r_full, df_r_null)
 
+    # repeat for the white wine dataframe
     sample_w <- sample.int(nrow(df_w), floor(0.5 * nrow(df_w)), replace = F)
     train_w <- df_w[sample_w, ]
     test_w <- df_w[-sample_w, ]
@@ -99,6 +117,7 @@ for (i in rand_list(1000)) {
     }
 }
 
+# save the results to a pipe delimited text document
 sink("r_test.txt")
 paste(Vectorize(function(x) return(paste(x, collapse = "|")))(as.vector(ls_r)))
 sink()
@@ -106,11 +125,15 @@ sink("w_test.txt")
 paste(Vectorize(function(x) return(paste(x, collapse = "|")))(as.vector(ls_w)))
 sink()
 
+# upload the previous docs to dataframes
+# hack for neatly adding the test results to dataframes
 df_rr <- read_delim("r_test.txt", delim = "|")
 df_ww <- read_delim("w_test.txt", delim =  "|")
 
+# filter the results by model frequency
 df_rr %>% count(model) %>% arrange(desc(n))
 df_ww %>% count(model) %>% arrange(desc(n))
 
+# write the results to a readable .csv
 write.csv(df_rr %>% arrange(desc(auc)), "r_test.csv")
 write.csv(df_ww %>% arrange(desc(auc)), "w_test.csv")
